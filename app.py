@@ -75,11 +75,15 @@ class Zelf:
 
 			r_test = self.s.get(self.API_HOST+"/sme/api/v1/customers/retail")
 			if r_test.status_code == 200:
+				open("authtoken", "w").write(r_test['cookie'])
 				return True, print("Successfully logged in")
 			return False, print("Unable to login")
 
 	def force_login(self, authorization_token: str) -> bool:
-		self.s.headers['cookie'] = "Authorization="+authorization_token
+		if not authorization_token.startswith("Authorization="):
+			authorization_token = "Authorization="+authorization_token
+		self.s.headers['cookie'] = authorization_token
+
 
 		r_test = self.s.get(self.API_HOST+"/sme/api/v1/customers/retail")
 		if r_test.status_code == 200:
