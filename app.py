@@ -201,7 +201,11 @@ class Zelf:
 
 
 z = Zelf()
-login_result = z.force_login(open("authtoken", "r").read())
+with open("authtoken", "a+") as f:
+	f.seek(0)
+	auth_token = f.read()
+
+login_result = z.force_login(auth_token)
 if type(login_result) == tuple and login_result[0] is False:
 	z.login(input("Your ZELF account phone number: "))
 
