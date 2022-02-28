@@ -194,10 +194,80 @@ class Zelf:
 		return self.limits
 
 
-	def getCardTopupLink(self, card_id: int) -> str:
+	def getCardTopupLink(self, card_id: int, short_link: bool=False) -> str:
 		r = self.s.get(self.API_HOST+f"/sme/api/v1/cards/{card_id}/hipay-link").json()
 
-		return r.get('url')
+		if short_link:
+			return r.get('url')
+
+
+		url_token = r.get('url').split('/')[-1]
+
+		headers = self.s.headers
+		headers['content-type'] = "application/x-www-form-urlencoded"
+
+		r = self.s.post(
+			self.API_HOST+"/auth/api/v1/logon/tiny-token",
+			data={
+				"Token": url_token,
+				"Channel": "telegram",
+				"FailureUrl": "/link-expired"
+			},
+			headers=headers
+		)
+
+		return r.url
+
+	def getTopupFee(self, destination_card: int, amount_to_topup: int) -> float:
+		r = self.s.post(
+			self.API_HOST+"/sme/api/v1/transfers/card-to-card/fee",
+			json={
+				"amount": {"value": amount_to_topup, "currency": "EUR"},
+				"destination_card": {"identity": "ID", "card_id": destination_card}}
+		).json()
+
+		if r.get('type'): #error
+			return r['message']
+
+		return r['amount']['value']
+
+
+	def topupCard(self, card_id: int, amount: float, source_card: dict, user_info: dict) -> bool|None:
+		# source_card = {"identity": "Number", number": "5100000000000034", "cvc": "000", "expiry_date": {"month": 1, "year": 2000}}
+		# user_info = {"firstname": "XXX", "lastname": "XXX", "country": "FR",
+		#				"city": "CITYNAME", "zipcode": "ZIPCODE",
+		#				"streetaddress": "XX rue XXXXXXX, ZIPCODE CITYNAME, France"}
+		#				"streetaddress2": None}
+		
+		data = {
+			"external_id": "13 char integer", # TODO: Investigate to found its origin
+			"browser_info": {
+				"javascript_enabled": True, "java_enabled": False,
+				"color_depth":24, "screen_height":768, "screen_width":1366,
+				"timezone":"-60"
+			},
+			"amount": {"value": amount, "currency":"EUR"},
+			"source_card": source_card,
+			"destination_card": {"identity": "ID", "card_id": card_id},
+			"user_info": user_info
+		}
+			
+		headers = self.s.headers
+		headers['user-agent'] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36"
+		r = self.s.post(
+			self.API_HOST+"/sme/api/v1/transfers/card-to-card",
+			json=data,
+			headers=headers
+		)
+
+		if r.status_code == 400:
+			return print(r.get('message'))
+
+
+
+	#def hack(self):
+	#	r = self.s.get(self.API_HOST+f"/sme/api/v1/cards/668002/hipay-link").json()
+	#	print(r)
 
 
 z = Zelf()
@@ -211,6 +281,8 @@ if type(login_result) == tuple and login_result[0] is False:
 
 
 print( z.getCardDetails(z.getCardsInfos()[0]['id']) )
-print( z.getAccountDetails() )
-print( z.getCardTopupLink(z.cards[0]['id']) )
-print( z.getIbanInfos() )
+#print( z.getAccountDetails() )
+#print( z.getCardTopupLink(z.cards[0]['id']) )
+#print( z.getIbanInfos() )
+#print( z.getTopupFee(z.cards[0]['id'], 125.75) )
+#print( z.hack() )
