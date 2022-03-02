@@ -19,6 +19,9 @@ class PhoneNumber:
 		if n[1:3] in [32, 33, 34]:
 			assert n[4] in [6,7] or n[5] in [6,7], "Looks like your phone number is not a mobile one!"
 
+		assert not any([not char.isdigit() for char in n[1:]]), "Wait, there's letter in your phone number?"
+
+
 
 
 class Zelf:
@@ -60,7 +63,7 @@ class Zelf:
 			headers['x-confirmation-code'] = otp_code
 
 			r = self.s.put(
-				self.API_HOST+"https://i.zelf.co/auth/api/v1/registration",
+				self.API_HOST+"/auth/api/v1/registration",
 				json={"cell_phone": phone_number, "channel": "Mobile"},
 				headers=headers
 			).json()
@@ -70,10 +73,56 @@ class Zelf:
 				return err, print(err)
 
 
-			self.s.headers['cookie'] = "Authorization="+self.s.headers['x-confirmation-token']
 			del self.s.headers['x-confirmation-token']
+			self.s.headers['cookie'] = "Authorization="+self.s.cookies['Authorization']
+
+			r2 = self.s.post(
+				self.API_HOST+"/auth/api/v1/identities/dh",
+				json={
+				  "client_open_key": "6L+Kp0oFXJ/P4Wb6TTrz7EEu/6YGjrTbE+fNJJst5hQ=", #what is that? r2 does return a server_open_key
+				  "device": {
+				    "device_token": {
+				      "type_id": "Firebase",
+				      "token": ""
+				    },
+				    "key": "e25bf559-f744-4546-a9a7-f02e5868e930", # phone uuid?
+				    "name": "PULP 4G",
+				    "version": "l5421",
+				    "os": {
+				      "type": "Android",
+				      "name": "5.1.1",
+				      "version": "22"
+				    },
+				    "vendor": "WIKO",
+				    "imei": "",
+				    "mac_addresses": [],
+				    "rooted": false,
+				    "options": []
+				  },
+				  "auth_type": "Device",
+				  "group_id": "Curve25519" # what?
+				}
+			).json()
+
+			r3 = self.s.get(self.API_HOST+f"/auth/api/v1/logon/scram/Device/{r2['login']}").json()
+			r4 = self.s.post(
+				self.API_HOST+"/auth/api/v1/logon/scram",
+				json={
+					"login": r2['login'],
+					"server_nonce": r3['server_nonce'],
+					"client_nonce": ..., # This random, but which random?
+					"client_proof": ..., # This built over server salt/iteration (r3) and ???
+					"auth_type": "Device",
+					"channel": "Mobile"
+				}
+			)
+			# r4, if successful, return a set-cookie header
+
+
+			self.s.headers['cookie'] = "Authorization="+self.s.cookies['Authorization']
 
 			r_test = self.s.get(self.API_HOST+"/sme/api/v1/customers/retail")
+
 			if r_test.status_code == 200:
 				open("authtoken", "w").write(r_test['cookie'])
 				return True, print("Successfully logged in")
@@ -88,6 +137,8 @@ class Zelf:
 		r_test = self.s.get(self.API_HOST+"/sme/api/v1/customers/retail")
 		if r_test.status_code == 200:
 			return True, print("Successfully logged in")
+
+		del self.s.headers['cookie']
 		return False, print("Unable to login using this auth token")
 
 
@@ -270,6 +321,7 @@ class Zelf:
 	#	print(r)
 
 
+
 z = Zelf()
 with open("authtoken", "a+") as f:
 	f.seek(0)
@@ -277,11 +329,13 @@ with open("authtoken", "a+") as f:
 
 login_result = z.force_login(auth_token)
 if type(login_result) == tuple and login_result[0] is False:
-	z.login(input("Your ZELF account phone number: "))
+	if z.login(phone_number=input("Your ZELF account phone number: ")) [0] is not True:
+		print()
+		raise Exception("Unable to login!")
 
 
+print( z.getAccountDetails() )
 print( z.getCardDetails(z.getCardsInfos()[0]['id']) )
-#print( z.getAccountDetails() )
 #print( z.getCardTopupLink(z.cards[0]['id']) )
 #print( z.getIbanInfos() )
 #print( z.getTopupFee(z.cards[0]['id'], 125.75) )
